@@ -1,0 +1,10 @@
+{
+  "name": "J.A.R.V.I.S.",
+  "description": "Voice-activated AI assistant powered by Gemini Live API",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
