@@ -1,8 +1,8 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 
 /**
  * AI Tool Orchestrator
- * (File designed for your friend to customize and train tool mappings)
+ * Routes voice & text commands to real Sentinel hardware, security, and OMEN RAM Boost tools.
  */
 export const sentinelToolDeclarations = [
   {
@@ -11,7 +11,7 @@ export const sentinelToolDeclarations = [
     parameters: {
       type: Type.OBJECT,
       properties: {},
-    }
+    },
   },
   {
     name: 'cleanStorage',
@@ -19,26 +19,36 @@ export const sentinelToolDeclarations = [
     parameters: {
       type: Type.OBJECT,
       properties: {
-        confirm: { type: Type.BOOLEAN, description: 'Explicit confirmation from user to purge temp files.' }
+        confirm: { type: Type.BOOLEAN, description: 'Explicit confirmation from user to purge temp files.' },
       },
-      required: ['confirm']
-    }
+      required: ['confirm'],
+    },
   },
   {
     name: 'checkNetworkSecurity',
     description: 'Audits Wi-Fi encryption, DNS leak status, and firewall integrity.',
     parameters: {
       type: Type.OBJECT,
-      properties: {}
-    }
+      properties: {},
+    },
   },
   {
     name: 'getProcessThreats',
     description: 'Scans running desktop processes for malware, high memory leaks, and suspicious tasks.',
     parameters: {
       type: Type.OBJECT,
-      properties: {}
-    }
+      properties: {},
+    },
+  },
+  {
+    name: 'boostRam',
+    description: 'Runs OMEN-style RAM Boost using Win32 EmptyWorkingSet and background process memory trimming.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        trimWorkingSets: { type: Type.BOOLEAN, description: 'Trim working sets across running user processes' },
+      },
+    },
   },
   {
     name: 'launchApp',
@@ -47,19 +57,19 @@ export const sentinelToolDeclarations = [
       type: Type.OBJECT,
       properties: {
         appName: { type: Type.STRING, description: 'Application name to launch' },
-        query: { type: Type.STRING, description: 'Optional query if searching or navigating' }
+        query: { type: Type.STRING, description: 'Optional query if searching or navigating' },
       },
-      required: ['appName']
-    }
+      required: ['appName'],
+    },
   },
   {
     name: 'getSystemOverview',
     description: 'Gets current CPU, GPU, RAM, and battery performance numbers.',
     parameters: {
       type: Type.OBJECT,
-      properties: {}
-    }
-  }
+      properties: {},
+    },
+  },
 ];
 
 export interface OrchestrationResult {
@@ -75,31 +85,76 @@ export interface OrchestrationResult {
 export async function routeUserCommand(input: string): Promise<OrchestrationResult> {
   const normalized = input.toLowerCase();
 
-  // Fast offline intent matchers (guarantees instant responsiveness even without API keys)
-  if (normalized.includes('scan') && (normalized.includes('storage') || normalized.includes('disk') || normalized.includes('file') || normalized.includes('space'))) {
+  // OMEN-style RAM Boost / Memory Optimization matcher
+  if (
+    (normalized.includes('ram') &&
+      (normalized.includes('boost') ||
+        normalized.includes('optimiz') ||
+        normalized.includes('reduce') ||
+        normalized.includes('free') ||
+        normalized.includes('clean') ||
+        normalized.includes('clear'))) ||
+    (normalized.includes('memory') &&
+      (normalized.includes('boost') ||
+        normalized.includes('optimiz') ||
+        normalized.includes('reduce') ||
+        normalized.includes('free') ||
+        normalized.includes('clean'))) ||
+    normalized.includes('omen') ||
+    normalized.includes('working set')
+  ) {
+    return {
+      tool: 'boostRam',
+      args: { trimWorkingSets: true },
+      explanation: 'Executing OMEN-style RAM Boost (Win32 EmptyWorkingSet + background working-set trim)...',
+    };
+  }
+
+  if (
+    normalized.includes('scan') &&
+    (normalized.includes('storage') || normalized.includes('disk') || normalized.includes('file') || normalized.includes('space'))
+  ) {
     return {
       tool: 'scanStorage',
       explanation: 'Initiating deep disk scan across system drive...',
     };
   }
 
-  if (normalized.includes('clean') || normalized.includes('free up') || normalized.includes('boost') || normalized.includes('clear temp')) {
+  if (
+    normalized.includes('clean') ||
+    normalized.includes('free up') ||
+    normalized.includes('clear temp') ||
+    normalized.includes('purge')
+  ) {
     return {
       tool: 'cleanStorage',
       args: { confirm: true },
       explanation: 'Purging temporary files, shader cache, and old installers.',
-      requiresConfirmation: true
+      requiresConfirmation: true,
     };
   }
 
-  if (normalized.includes('network') || normalized.includes('wifi') || normalized.includes('wi-fi') || normalized.includes('safe') || normalized.includes('firewall')) {
+  if (
+    normalized.includes('network') ||
+    normalized.includes('wifi') ||
+    normalized.includes('wi-fi') ||
+    normalized.includes('safe') ||
+    normalized.includes('firewall') ||
+    normalized.includes('port')
+  ) {
     return {
       tool: 'checkNetworkSecurity',
-      explanation: 'Running network encryption audit and checking Wi-Fi integrity...',
+      explanation: 'Running network encryption audit and checking active listening ports...',
     };
   }
 
-  if (normalized.includes('threat') || normalized.includes('virus') || normalized.includes('process') || normalized.includes('malware') || normalized.includes('suspicious')) {
+  if (
+    normalized.includes('threat') ||
+    normalized.includes('virus') ||
+    normalized.includes('process') ||
+    normalized.includes('malware') ||
+    normalized.includes('suspicious')
+  ) {
     return {
       tool: 'getProcessThreats',
       explanation: 'Analyzing active background processes and checking threat indicators...',
@@ -115,16 +170,22 @@ export async function routeUserCommand(input: string): Promise<OrchestrationResu
     };
   }
 
-  if (normalized.includes('status') || normalized.includes('performance') || normalized.includes('cpu') || normalized.includes('ram') || normalized.includes('insights')) {
+  if (
+    normalized.includes('status') ||
+    normalized.includes('performance') ||
+    normalized.includes('cpu') ||
+    normalized.includes('ram') ||
+    normalized.includes('insights') ||
+    normalized.includes('telemetry')
+  ) {
     return {
       tool: 'getSystemOverview',
       explanation: 'Gathering live hardware telemetry (CPU, RAM, GPU, Battery)...',
     };
   }
 
-  // Fallback response for conversational questions
   return {
     tool: null,
-    explanation: `Sentinel command received: "${input}". Awaiting operational directive.`
+    explanation: `Sentinel command received: "${input}". Awaiting operational directive.`,
   };
 }

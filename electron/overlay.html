@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sentinel Telemetry Overlay</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      }
+      .overlay-wrapper {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        background: rgba(5, 6, 8, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 7px;
+        padding: 8px 14px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85);
+        white-space: nowrap;
+        cursor: grab;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .bar.dragging {
+        cursor: grabbing;
+        border-color: rgba(56, 189, 248, 0.75);
+      }
+      .bar.pinned {
+        cursor: default;
+        border-color: rgba(0, 230, 118, 0.55);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(0, 230, 118, 0.18);
+      }
+      .grip {
+        display: flex;
+        align-items: center;
+        color: #9e95b0;
+        padding-right: 6px;
+        border-right: 1px solid rgba(255, 255, 255, 0.12);
+        font-size: 14px;
+        letter-spacing: -1px;
+      }
+      .bar.pinned .grip {
+        color: rgba(0, 230, 118, 0.75);
+      }
+      .stat {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+      }
+      .label {
+        font-size: 14px;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: 0.03em;
+      }
+      .val {
+        font-size: 14px;
+        font-weight: 700;
+        color: #ffffff;
+        font-variant-numeric: tabular-nums;
+      }
+      .temp {
+        font-size: 14px;
+        font-weight: 700;
+        color: #00e676;
+        font-variant-numeric: tabular-nums;
+      }
+      .temp.warn {
+        color: #f59e0b;
+      }
+      .temp.hot {
+        color: #fb7185;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-left: 8px;
+        border-left: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .pin-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 9px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.07);
+        color: #d4cee0;
+        transition: all 0.15s ease;
+      }
+      .pin-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: #ffffff;
+      }
+      .pin-btn.active {
+        background: rgba(0, 230, 118, 0.2);
+        border-color: rgba(0, 230, 118, 0.5);
+        color: #00e676;
+      }
+      .pin-btn.active:hover {
+        background: rgba(251, 113, 133, 0.22);
+        border-color: rgba(251, 113, 133, 0.5);
+        color: #fb7185;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="overlay-wrapper">
+      <div id="bar" class="bar" title="Drag anywhere on screen • Click PIN to lock over Chrome & other apps">
+        <div class="grip" id="grip">⋮⋮</div>
+
+        <div class="stat">
+          <span class="label">CPU</span>
+          <span class="val" id="cpuUsage">17%</span>
+          <span class="temp" id="cpuTemp">56°C</span>
+        </div>
+
+        <div class="stat">
+          <span class="label">GPU</span>
+          <span class="val" id="gpuUsage">0%</span>
+          <span class="temp" id="gpuTemp">46°C</span>
+        </div>
+
+        <div class="stat">
+          <span class="label">RAM</span>
+          <span class="val" id="ramPercent">69.2%</span>
+        </div>
+
+        <div class="stat">
+          <span class="label">FPS</span>
+          <span class="val" id="fpsVal">60</span>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="pinBtn" class="pin-btn" title="Pin overlay on top of all apps">
+            <span id="pinIcon">📌</span>
+            <span id="pinText">PIN</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const bar = document.getElementById('bar');
+      const pinBtn = document.getElementById('pinBtn');
+      const pinText = document.getElementById('pinText');
+      const cpuUsageEl = document.getElementById('cpuUsage');
+      const cpuTempEl = document.getElementById('cpuTemp');
+      const gpuUsageEl = document.getElementById('gpuUsage');
+      const gpuTempEl = document.getElementById('gpuTemp');
+      const ramPercentEl = document.getElementById('ramPercent');
+      const fpsValEl = document.getElementById('fpsVal');
+
+      let isPinned = false;
+      let isDragging = false;
+      let dragStartScreenX = 0;
+      let dragStartScreenY = 0;
+
+      function updatePinUI() {
+        if (isPinned) {
+          bar.classList.add('pinned');
+          pinBtn.classList.add('active');
+          pinText.textContent = 'PINNED';
+          pinBtn.title = 'Click to Unpin and hide overlay (Shift + F3)';
+          bar.title = 'Pinned on top of all apps • Click PINNED to unpin & hide';
+        } else {
+          bar.classList.remove('pinned');
+          pinBtn.classList.remove('active');
+          pinText.textContent = 'PIN';
+          pinBtn.title = 'Pin at this spot over Chrome & all apps';
+          bar.title = 'Drag anywhere on screen • Click PIN to lock position over apps';
+        }
+      }
+
+      // Listen for reset-unpinned state when newly shown via Shift + F3
+      if (window.electronAPI && window.electronAPI.onOverlayShown) {
+        window.electronAPI.onOverlayShown((_e, state) => {
+          if (state && typeof state.pinned === 'boolean') {
+            isPinned = state.pinned;
+            updatePinUI();
+          }
+        });
+      }
+
+      pinBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!isPinned) {
+          // Pin it at the current monitor coordinates over Chrome & all apps
+          isPinned = true;
+          updatePinUI();
+          if (window.electronAPI && window.electronAPI.setOverlayPinState) {
+            window.electronAPI.setOverlayPinState(true);
+          }
+        } else {
+          // Unpin -> immediately hide the overlay window ("when i unpined it will be gone")
+          isPinned = false;
+          updatePinUI();
+          if (window.electronAPI && window.electronAPI.setOverlayPinState) {
+            window.electronAPI.setOverlayPinState(false);
+          }
+        }
+      });
+
+      // Native OS screen dragging when unpinned
+      bar.addEventListener('pointerdown', (e) => {
+        if (isPinned) return;
+        if (e.target.closest('button')) return;
+        isDragging = true;
+        dragStartScreenX = e.screenX;
+        dragStartScreenY = e.screenY;
+        bar.classList.add('dragging');
+        bar.setPointerCapture(e.pointerId);
+      });
+
+      bar.addEventListener('pointermove', (e) => {
+        if (!isDragging || isPinned) return;
+        const dx = e.screenX - dragStartScreenX;
+        const dy = e.screenY - dragStartScreenY;
+        if (dx !== 0 || dy !== 0) {
+          dragStartScreenX = e.screenX;
+          dragStartScreenY = e.screenY;
+          if (window.electronAPI && window.electronAPI.moveOverlayWindow) {
+            window.electronAPI.moveOverlayWindow(dx, dy);
+          }
+        }
+      });
+
+      bar.addEventListener('pointerup', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        bar.classList.remove('dragging');
+        try {
+          bar.releasePointerCapture(e.pointerId);
+        } catch {}
+      });
+
+      // Live FPS counter
+      let frames = 0;
+      let lastFpsTime = performance.now();
+      function tickFps(now) {
+        frames++;
+        if (now - lastFpsTime >= 1000) {
+          const currentFps = Math.min(240, Math.max(1, Math.round((frames * 1000) / (now - lastFpsTime))));
+          fpsValEl.textContent = String(currentFps);
+          frames = 0;
+          lastFpsTime = now;
+        }
+        requestAnimationFrame(tickFps);
+      }
+      requestAnimationFrame(tickFps);
+
+      // Live Telemetry polling from local Sentinel server
+      async function pollTelemetry() {
+        try {
+          const res = await fetch('http://localhost:3000/api/system/overlay-telemetry');
+          if (!res.ok) return;
+          const data = await res.json();
+          const cpu = Math.round(Number(data.cpuUsage) || 0);
+          const cTemp = Math.round(Number(data.cpuTemp) || 50);
+          const gpu = Math.round(Number(data.gpuUsage) || 0);
+          const gTemp = Math.round(Number(data.gpuTemp) || 45);
+          const ramUsed = Math.max(0.5, Number(data.ramUsed) || 8);
+          const ramTotal = Math.max(4, Number(data.ramTotal) || 16);
+          const ramPct = ((ramUsed / ramTotal) * 100).toFixed(1);
+
+          cpuUsageEl.textContent = cpu + '%';
+          cpuTempEl.textContent = cTemp + '°C';
+          cpuTempEl.className = 'temp' + (cTemp >= 82 ? ' hot' : cTemp >= 72 ? ' warn' : '');
+
+          gpuUsageEl.textContent = gpu + '%';
+          gpuTempEl.textContent = gTemp + '°C';
+          gpuTempEl.className = 'temp' + (gTemp >= 82 ? ' hot' : gTemp >= 72 ? ' warn' : '');
+
+          ramPercentEl.textContent = ramPct + '%';
+        } catch {}
+      }
+
+      pollTelemetry();
+      setInterval(pollTelemetry, 1500);
+    </script>
+  </body>
+</html>
